@@ -1,23 +1,19 @@
-#!/bin/sh
-#if [ "`uname`" == "Darwin" ]; then sed_regexp="-E"; else sed_regexp="-r"; fi 
+#!/bin/bash
 
-# I've GNU's sed
+if [ "`uname`" == "Darwin" ]; then sed_regexp="-E"; else sed_regexp="-r"; fi
+# Force GNU's sed
 sed_regexp="-r"
 
-# Defined arch
-ARCH=ppc
-
 GIT_VERSION="${1:-`curl http://git-scm.com/ 2>&1 | grep "<div id=\"ver\">" | sed $sed_regexp 's/^.+>v([0-9.]+)<.+$/\1/'`}"
-
-
 #PREFIX=/usr/local/git
-
 # Make it local to avoid sudo
 PREFIX=$PWD/git
 INST_PREFIX=/usr/local/git
-
 # Undefine to not use sudo
 SUDO=
+
+# Defined arch
+ARCH=ppc
 
 echo "Building GIT_VERSION $GIT_VERSION with arch $ARCH"
 
@@ -25,37 +21,30 @@ echo "Building GIT_VERSION $GIT_VERSION with arch $ARCH"
 
 mkdir -p git_build
 
+DOWNLOAD_LOCATION="http://git-core.googlecode.com/files"
+
 pushd git_build
-    [ ! -f git-$GIT_VERSION.tar.bz2 ] && curl -O http://kernel.org/pub/software/scm/git/git-$GIT_VERSION.tar.bz2
-    [ ! -d git-$GIT_VERSION ] && tar jxvf git-$GIT_VERSION.tar.bz2
-    
-    # Copy the already compiled git
-    #[ ! -d ../../git-$GIT_VERSION ] && echo "../../git-$GIT_VERSION does not exist" && exit 1    
-    #echo "Deleting old directory ..."
-    #rm -rf git-$GIT_VERSION
-    #echo "Copying ../../git-$GIT_VERSION ..."
-    #cp -r ../../git-$GIT_VERSION .
-    
+    [ ! -f git-$GIT_VERSION.tar.gz ] && curl -O $DOWNLOAD_LOCATION/git-$GIT_VERSION.tar.gz
+    [ ! -d git-$GIT_VERSION ] && tar zxvf git-$GIT_VERSION.tar.gz
+
     pushd git-$GIT_VERSION
 
-        #[ -f Makefile_head ] && rm Makefile_head
-        # If you're on PPC, you may need to uncomment this line: 
+        [ -f Makefile_head ] && rm Makefile_head
+        # If you're on PPC, you may need to uncomment this line:
         # echo "MOZILLA_SHA1=1" >> Makefile_head
 
         # Tell make to use $PREFIX/lib rather than MacPorts:
-        #echo "NO_DARWIN_PORTS=1" >> Makefile_head
-        #cat Makefile >> Makefile_head
-        #mv Makefile_head Makefile
+        echo "NO_DARWIN_PORTS=1" >> Makefile_head
+        cat Makefile >> Makefile_head
+        mv Makefile_head Makefile
 
-        # Make fat binaries with ppc/32 bit/64 bit
-        # Why ???
         #CFLAGS="-mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.5.sdk -arch $ARCH"
         #LDFLAGS="-mmacosx-version-min=10.4 -isysroot /Developer/SDKs/MacOSX10.5.sdk -arch $ARCH"
         #make CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" prefix="$PREFIX" all
         #make CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS" prefix="$PREFIX" strip
-        
+
         echo "Configuring ..."
-        ./configure --prefix="$INST_PREFIX"        
+        ./configure --prefix="$INST_PREFIX"
         echo "Compiling ..."
         make all
         echo "Striping ..."
@@ -66,13 +55,18 @@ pushd git_build
         echo "Copying completion for bash ..."
         $SUDO mkdir -p $PREFIX/$INST_PREFIX/contrib/completion
         $SUDO cp contrib/completion/git-completion.bash $PREFIX/$INST_PREFIX/contrib/completion/
+        #$SUDO cp perl/private-Error.pm $PREFIX/$INST_PREFIX/lib/perl5/site_perl/Error.pm
     popd
-    
+
     echo "Downloading manpages ..."
-    [ ! -f git-manpages-$GIT_VERSION.tar.bz2 ] && curl -O http://www.kernel.org/pub/software/scm/git/git-manpages-$GIT_VERSION.tar.bz2
+    git_man_archive=git-manpages-$GIT_VERSION.tar.gz
+    [ ! -f $git_man_archive ] && curl -O $DOWNLOAD_LOCATION/$git_man_archive
     $SUDO mkdir -p $PREFIX/$INST_PREFIX/share/man
     echo "Uncompressing manpages ..."
-    $SUDO tar xjvo -C $PREFIX/$INST_PREFIX/share/man -f git-manpages-$GIT_VERSION.tar.bz2
+    if ( ! $SUDO tar zxvo -C $PREFIX/$INST_PREFIX/share/man -f $git_man_archive ); then
+      echo "Error extracting manpages!!! Maybe download location has changed / failed? Look at `pwd`/$git_man_archive. Remove it and re-run build to attempt redownload."
+      exit 1
+    fi
 popd
 
 # change hardlinks for symlinks
